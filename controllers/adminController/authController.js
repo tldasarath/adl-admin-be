@@ -1,27 +1,34 @@
-import User from "../../models/userModel.js";
-import bcrypt from "bcrypt";
+
+import { validationResult } from "express-validator";
 import { generateToken } from "../../utils/jwtToken.js";
+import User from "../../models/userModel.js";
 
 export const login = async (req, res) => {
-    try {
-        const { email, password } = req.body;
+  try {
 
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(401).json({ message: "Invalid credentials" });
-        }
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: "Invalid credentials" });
-        }
-        const token = generateToken({ id: user.id, role: user.role });
-        res.status(200).json({
-            success: true,
-            message: "Login successful",
-            token,
-        });
-    } catch (error) {
-        console.error(error);
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ success: false, errors: errors.array() });
 
+    const { email, password } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
-}
+
+    const matched = await user.matchPassword(password);
+    if (!matched) return res.status(401).json({ success: false, message: "Invalid credentials" });
+
+    const token = generateToken({ id: user._id, role: user.role });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+    });
+  } catch (error) {
+    console.error("login error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

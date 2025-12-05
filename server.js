@@ -33,8 +33,8 @@ app.use(express.urlencoded({ extended: true }));
 env.config();
 
 // Routes
-app.use('/admin', adminroute);
 app.use('/public/v1', publicRoute);
+app.use('/api/v1/admin', adminroute);
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {
