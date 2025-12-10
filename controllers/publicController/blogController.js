@@ -108,8 +108,9 @@ export const getBlogs = async (req, res) => {
 
 export const getBlog = async (req, res) => {
   try {
-    const blogs = await blog.findById(req.params.id);
-    
+
+    const blogs = await blog.find({ url: req.params.url });
+
     if (!blogs) return res.status(404).json({ success: false, error: "Not Found" });
 
     res.json({ success: true, data: blogs });
@@ -120,10 +121,10 @@ export const getBlog = async (req, res) => {
 
 export const updateBlog = async (req, res) => {
   try {
-    
+
     const updates = req.body;
 
-    // Fetch existing blog
+
     const existingBlog = await blog.findById(req.params.id);
     if (!existingBlog) {
       return res.status(404).json({
@@ -132,19 +133,15 @@ export const updateBlog = async (req, res) => {
         message: "Blog not found."
       });
     }
-
-    // If image is replaced, delete old Cloudinary image
     if (req.file) {
       if (existingBlog.image) {
         try {
           const oldUrl = existingBlog.image;
-
-          // Extract public_id safely
           const publicId = oldUrl
             .split("/")
             .slice(-2)
             .join("/")
-            .replace(/\.[^/.]+$/, ""); // remove extension
+            .replace(/\.[^/.]+$/, ""); 
 
           await cloudinary.uploader.destroy(publicId);
         } catch (err) {

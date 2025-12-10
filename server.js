@@ -9,6 +9,7 @@ import morgan from 'morgan';
 import path from "path";
 import { fileURLToPath } from "url";  // ⭐ Required for __dirname fix
 import publicRoute from './route/public/indexRoute.js';
+import cookieParser from 'cookie-parser';
 
 // Fix __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +19,7 @@ const app = express();
 
 app.use(morgan("dev"));
 
+app.use(cookieParser()); 
 // Connect DB
 connectDB();
 

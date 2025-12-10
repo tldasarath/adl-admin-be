@@ -1,8 +1,12 @@
 import express from 'express'
 import { getSeo, saveSeo } from '../../controllers/adminController/seoController.js'
-const seoRoute =express.Router()
+import { authMiddleware } from '../../middleware/authMiddleware.js'
+import { authorizeRoles } from '../../middleware/authorizeRoles.js'
+const seoRoute = express.Router()
 
-seoRoute.post('/add-seo',saveSeo)
-seoRoute.get('/get-seo',getSeo)
+seoRoute.post('/add-seo', authMiddleware,
+    authorizeRoles("admin"), saveSeo)
+seoRoute.get('/get-seo', authMiddleware,
+    authorizeRoles("admin"), getSeo)
 
 export default seoRoute

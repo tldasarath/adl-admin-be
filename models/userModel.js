@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     role: { type: String, enum: ["superadmin", "admin"], default: "admin" },
     isActive: { type: Boolean, default: true },
+    refreshToken: { type: String },
     verify: { type: Boolean, default: true }, 
   },
   { timestamps: true }

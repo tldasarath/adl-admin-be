@@ -13,6 +13,7 @@ const blogSchema = new mongoose.Schema(
         canonical: { type: String, required: false },
         subCategory: { type: String, required: false },
         category: { type: String, required: false },
+        url: { type: String, required: false },
 
         status: {
             type: String,

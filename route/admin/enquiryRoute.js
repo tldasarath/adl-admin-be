@@ -1,9 +1,14 @@
 import express from 'express'
 import { addEnquiry, deleteEnquiry, getAllEnquiries } from '../../controllers/adminController/enquiryController.js'
-const enquiryRoute =express.Router()
+import { authMiddleware } from '../../middleware/authMiddleware.js'
+import { authorizeRoles } from '../../middleware/authorizeRoles.js'
+const enquiryRoute = express.Router()
 
-enquiryRoute.get('/all-enquiries',getAllEnquiries)
-enquiryRoute.post('/create-enquiry',addEnquiry)
-enquiryRoute.delete("/delete-enquiry/:id",deleteEnquiry)
+enquiryRoute.get('/all-enquiries', authMiddleware,
+    authorizeRoles("admin"), getAllEnquiries)
+enquiryRoute.post('/create-enquiry', authMiddleware,
+    authorizeRoles("admin"), addEnquiry)
+enquiryRoute.delete("/delete-enquiry/:id", authMiddleware,
+    authorizeRoles("admin"), deleteEnquiry)
 
 export default enquiryRoute
