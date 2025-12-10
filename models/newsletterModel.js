@@ -34,7 +34,19 @@ const newsletterSchema = new mongoose.Schema({
   lastSentAt: { type: Date },
 
   unsubscribeToken: { type: String },
+
+  unsubscribedAt: { type: Date },
+unsubscribeIp: { type: String },
+unsubscribeUserAgent: { type: String },
+events: [
+  {
+    type: { type: String },
+    at: { type: Date, default: Date.now },
+    meta: { type: Object, default: {} },
+  },
+],
 });
+
 
 newsletterSchema.pre("save", function (next) {
   this.updatedAt = Date.now();

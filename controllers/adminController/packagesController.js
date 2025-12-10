@@ -1,87 +1,105 @@
 import CommonPackage from "../../models/CommonPackage.js";
 import CategoryPackage from "../../models/CategoryPackage.js";
+import cloudinary from "../../config/cloudinary.js";
 
-/* ============================================================
-   COMMON PACKAGES
-============================================================ */
+
 
 export const createCommonPackage = async (req, res) => {
   try {
-    const { iconUrl, title, description, points, amount, is_home, is_freezone } = req.body;
+    const { title, description, amount } = req.body;
+
+    // points sent as points[] from UI
+    const points = Array.isArray(req.body.points)
+      ? req.body.points.map(p => p.trim()).filter(Boolean)
+      : [];
+
+    const is_home =
+      req.body.is_home === "true" ||
+      req.body.is_home === true ||
+      req.body.is_home === "1";
+
+    const is_freezone =
+      req.body.is_freezone === "true" ||
+      req.body.is_freezone === true ||
+      req.body.is_freezone === "1";
 
     // Validation
-    if (!title || !description || !Array.isArray(points) || points.length === 0 || points.length > 4) {
+    if (!title || !description) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Title and description are required." });
+    }
+
+    if (points.length < 1 || points.length > 4) {
       return res.status(400).json({
         success: false,
-        statusCode: 400,
-        message: "Invalid fields. Points must be between 1 and 4."
+        message: "Points must contain 1 to 4 items.",
       });
     }
 
-    if (amount === undefined) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: "Amount is required."
-      });
+    if (!amount || Number.isNaN(Number(amount))) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid amount is required." });
     }
 
     if (!is_home && !is_freezone) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: "Select either is_home or is_freezone."
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Choose either is_home or is_freezone." });
     }
 
     if (is_home && is_freezone) {
       return res.status(400).json({
         success: false,
-        statusCode: 400,
-        message: "Only one of is_home or is_freezone can be true."
+        message: "Only one of is_home or is_freezone can be true.",
       });
     }
 
     const typeField = is_home ? "is_home" : "is_freezone";
-    const existingCount = await CommonPackage.countDocuments({ [typeField]: true });
+    const count = await CommonPackage.countDocuments({ [typeField]: true });
 
-    if (existingCount >= 3) {
+    if (count >= 3) {
       return res.status(400).json({
         success: false,
-        statusCode: 400,
-        message: `Maximum 3 packages allowed for ${typeField}.`
+        message: `Maximum 3 packages allowed for ${typeField}.`,
       });
     }
 
-    const newPackage = await CommonPackage.create({
-      iconUrl,
+    // Build object
+    const pkgObj = {
       title,
       description,
-      points: points.map(p => ({ text: p })),
-      amount,
-      is_home: !!is_home,
-      is_freezone: !!is_freezone
-    });
+      points,
+      amount: Number(amount),
+      is_home,
+      is_freezone,
+    };
+
+    // image upload
+    if (req.file) {
+      pkgObj.iconUrl =
+        req.file.secure_url || req.file.path || req.file.url || req.file.location;
+      pkgObj.iconPublicId =
+        req.file.public_id || req.file.filename || req.file.originalname;
+    }
+
+    const created = await CommonPackage.create(pkgObj);
 
     return res.status(201).json({
       success: true,
-      statusCode: 201,
       message: "Common package created successfully.",
-      data: newPackage
+      data: created,
     });
-
   } catch (error) {
     console.error("Create Common Package Error:", error);
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "Server error while creating package.",
-      error: error.message
+      message: "Server error.",
+      error: error.message,
     });
   }
 };
-
-
 
 export const getAllCommonPackages = async (req, res) => {
   try {
@@ -143,107 +161,141 @@ export const getCommonPackageById = async (req, res) => {
 
 
 
+/* ---------------- Update Common Package ---------------- */
 export const updateCommonPackage = async (req, res) => {
   try {
-    const { iconUrl, title, description, points, amount, is_home, is_freezone } = req.body;
     const pkg = await CommonPackage.findById(req.params.id);
+    if (!pkg) return res.status(404).json({ success:false, statusCode:404, message:'Package not found.' });
 
-    if (!pkg) {
-      return res.status(404).json({
-        success: false,
-        statusCode: 404,
-        message: "Package not found."
-      });
-    }
+    // helper: normalize incoming points into Array<string> or null (if not provided)
+    const normalizePoints = (raw) => {
+      if (raw === undefined || raw === null) return null;
 
-    // If type changes, validate
+      // If already an array
+      if (Array.isArray(raw)) {
+        return raw.map(p => String(p).trim()).filter(Boolean);
+      }
+
+      // If object-like (e.g. {0: 'a', 1: 'b'} from some form encoders)
+      if (typeof raw === 'object') {
+        try {
+          return Object.values(raw).map(v => String(v).trim()).filter(Boolean);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // If a string: maybe comma separated or a single value
+      if (typeof raw === 'string') {
+        if (raw.indexOf(',') !== -1) {
+          return raw.split(',').map(s => s.trim()).filter(Boolean);
+        }
+        if (raw.trim() === '') return [];
+        return [raw.trim()];
+      }
+
+      return null;
+    };
+
+    // read simple fields
+    const { title, description, amount } = req.body;
+
+    // Normalize points (no external parsePoints used)
+    const points = req.body.points ? normalizePoints(req.body.points) : null;
+
+    // booleans (accept '1'/'0', 'true'/'false', true/false)
+    const is_home = req.body.is_home === 'true' || req.body.is_home === true || req.body.is_home === '1' || req.body.is_home === 1;
+    const is_freezone = req.body.is_freezone === 'true' || req.body.is_freezone === true || req.body.is_freezone === '1' || req.body.is_freezone === 1;
+
+    // If type changes, enforce limit
     if ((is_home && !pkg.is_home) || (is_freezone && !pkg.is_freezone)) {
-      const typeField = is_home ? "is_home" : "is_freezone";
+      const typeField = is_home ? 'is_home' : 'is_freezone';
       const count = await CommonPackage.countDocuments({ [typeField]: true, _id: { $ne: pkg._id } });
-
-      if (count >= 3) {
-        return res.status(400).json({
-          success: false,
-          statusCode: 400,
-          message: `Max 3 packages allowed for ${typeField}.`
-        });
-      }
+      if (count >= 3) return res.status(400).json({ success:false, statusCode:400, message:`Max 3 packages allowed for ${typeField}.` });
     }
 
-    // Apply updates
-    if (title) pkg.title = title;
-    if (description) pkg.description = description;
-    if (iconUrl !== undefined) pkg.iconUrl = iconUrl;
-    if (amount !== undefined) pkg.amount = amount;
+    // handle new image: delete old from Cloudinary then set new
+    if (req.file) {
+      if (pkg.iconPublicId) {
+        try {
+          await cloudinary.uploader.destroy(pkg.iconPublicId);
+        } catch (err) {
+          console.warn('Cloudinary delete failed (non-fatal):', err.message);
+        }
+      }
+      pkg.iconUrl = req.file.secure_url || req.file.path || req.file.url || req.file.location;
+      pkg.iconPublicId = req.file.public_id || req.file.filename || req.file.path;
+    }
 
-    if (points) {
+    // update primitive fields only if provided
+    if (title !== undefined) pkg.title = title;
+    if (description !== undefined) pkg.description = description;
+    if (amount !== undefined) pkg.amount = Number(amount);
+
+    // points: store as array of strings (schema expects [String])
+    if (points !== null) {
       if (!Array.isArray(points) || points.length === 0 || points.length > 4) {
-        return res.status(400).json({
-          success: false,
-          statusCode: 400,
-          message: "Points must be 1–4 items."
-        });
+        return res.status(400).json({ success:false, statusCode:400, message:'Points must be 1–4.' });
       }
-      pkg.points = points.map(p => ({ text: p }));
+      pkg.points = points.map(p => String(p));
     }
 
+    // validate exclusive booleans
     if (is_home && is_freezone) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: "Only one of is_home or is_freezone allowed."
-      });
+      return res.status(400).json({ success:false, statusCode:400, message:'Only one of is_home or is_freezone allowed.' });
     }
+    if (req.body.is_home !== undefined) pkg.is_home = !!is_home;
+    if (req.body.is_freezone !== undefined) pkg.is_freezone = !!is_freezone;
 
-    if (is_home !== undefined) pkg.is_home = !!is_home;
-    if (is_freezone !== undefined) pkg.is_freezone = !!is_freezone;
-
+    pkg.updatedAt = Date.now();
     await pkg.save();
 
-    return res.status(200).json({
-      success: true,
-      statusCode: 200,
-      message: "Common package updated successfully.",
-      data: pkg
-    });
+    return res.status(200).json({ success:true, statusCode:200, message:'Package updated.', data: pkg });
 
   } catch (error) {
-    console.error("Update Package Error:", error);
-    return res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: "Error updating package.",
-      error: error.message
-    });
+    console.error('Update Common Package Error:', error);
+    return res.status(500).json({ success:false, statusCode:500, message:'Server error.', error: error.message });
   }
 };
 
 
 
+/* ---------------- Delete Common Package ---------------- */
 export const deleteCommonPackage = async (req, res) => {
   try {
-    const pkg = await CommonPackage.findByIdAndDelete(req.params.id);
-    if (!pkg) {
+    const pkg = await CommonPackage.findById(req.params.id);
+    if (!pkg)
       return res.status(404).json({
         success: false,
         statusCode: 404,
-        message: "Package not found."
+        message: "Package not found.",
       });
+
+    // delete cloudinary image only if publicId exists
+    if (pkg.iconPublicId) {
+      try {
+        const result = await cloudinary.uploader.destroy(pkg.iconPublicId);
+        console.log("Cloudinary delete:", result);
+      } catch (err) {
+        console.warn("Cloudinary deletion failed:", err.message);
+      }
     }
+
+    // delete DB record
+    await CommonPackage.deleteOne({ _id: pkg._id });
 
     return res.status(200).json({
       success: true,
       statusCode: 200,
-      message: "Package deleted successfully."
+      message: "Package deleted successfully.",
     });
-
   } catch (error) {
-    console.error("Delete Package Error:", error);
+    console.error("Delete Common Package Error:", error);
     return res.status(500).json({
       success: false,
       statusCode: 500,
-      message: "Error deleting package.",
-      error: error.message
+      message: "Server error.",
+      error: error.message,
     });
   }
 };
@@ -424,7 +476,6 @@ export const updateCategoryPackage = async (req, res) => {
     const pkg = page.packages.id(packageId);
     if (!pkg) return res.status(404).json({ success: false, message: "Package not found." });
 
-    // Update fields
     if (title) pkg.title = title;
     if (price !== undefined) pkg.price = price;
 
@@ -472,10 +523,22 @@ export const deleteCategoryPackage = async (req, res) => {
     const page = doc.pages.find(p => p.pageName === pageName);
     if (!page) return res.status(404).json({ success: false, message: "Page not found." });
 
-    const pkg = page.packages.id(packageId);
-    if (!pkg) return res.status(404).json({ success: false, message: "Package not found." });
 
-    pkg.remove();
+    const pkgIndex = page.packages.findIndex(p => {
+
+      try {
+        return String(p._id) === String(packageId);
+      } catch (e) {
+        return false;
+      }
+    });
+
+    if (pkgIndex === -1) return res.status(404).json({ success: false, message: "Package not found." });
+
+
+    page.packages = page.packages.filter((p, idx) => idx !== pkgIndex);
+
+
     await doc.save();
 
     return res.status(200).json({
@@ -494,6 +557,7 @@ export const deleteCategoryPackage = async (req, res) => {
     });
   }
 };
+
 
 
 

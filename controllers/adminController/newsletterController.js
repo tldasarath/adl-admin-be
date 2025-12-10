@@ -256,27 +256,56 @@ export const getAllSubscribers = async (req, res) => {
 
 
 export const unsubscribe = async (req, res) => {
+  try {
+    const token = req.query.token || req.body.token;
+    if (!token) return res.status(400).json({ ok: false, message: "Missing token" });
 
-  const token = req.query.token || req.body.token;
-  if (!token) {
-    return res.status(400).json({ ok: false, message: "Missing token" });
+    const payload = verifyUnsubscribe(token);
+    if (!payload?.email) return res.status(400).json({ ok: false, message: "Invalid token" });
+
+    const email = String(payload.email).toLowerCase().trim();
+    const doc = await Newsletter.findOne({ email });
+
+    // Return success even if missing to avoid enumeration
+    if (!doc) {
+      console.warn("Unsubscribe: no subscriber found for", email);
+      return res.json({ ok: true, message: "If that email was subscribed, it has been unsubscribed." });
+    }
+
+    // If already unsubscribed, log attempt and return success
+    if (doc.status === "unsubscribed" || doc.status === "blocked") {
+      doc.events = doc.events || [];
+      doc.events.push({ type: "unsubscribe_attempt", at: new Date(), meta: { ip: req.ip } });
+      doc.save().catch(() => {});
+      return res.json({ ok: true, message: "You were already unsubscribed." });
+    }
+
+    // Mark unsubscribed
+    doc.status = "unsubscribed";
+    doc.unsubscribedAt = new Date();
+    doc.unsubscribeIp = req.ip;
+    doc.unsubscribeUserAgent = req.headers["user-agent"] || "";
+    doc.events = doc.events || [];
+    doc.events.push({ type: "unsubscribed", at: new Date(), meta: { ip: req.ip } });
+
+    await doc.save();
+
+    // Try to build/send confirmation email but DO NOT let failures block the response
+    try {
+      const unsubscribeLink = `${process.env.WEBSITE_BASE_URL || "https://yourdomain.com"}/unsubscribe?token=${encodeURIComponent(doc.unsubscribeToken || token)}`;
+      const { html, text } = buildUnsubscribeEmail({ email, unsubscribeLink });
+      sendMail({ to: email, subject: "You have been unsubscribed", html, text }).catch((err) => {
+        console.warn("Unsubscribe confirmation email failed:", err?.message || err);
+      });
+    } catch (emailErr) {
+      console.warn("Failed to build/send unsubscribe email:", emailErr);
+    }
+
+    return res.json({ ok: true, message: "Unsubscribed" });
+  } catch (err) {
+    console.error("unsubscribe controller error:", err);
+    return res.status(500).json({ ok: false, message: "Server error" });
   }
-  const payload = verifyUnsubscribe(token);
-  if (!payload?.email) return res.status(400).json({ ok: false, message: "Invalid token" });
-
-  const email = payload.email;
-  const doc = await Newsletter.findOne({ email });
-  if (!doc) return res.status(404).json({ ok: false, message: "Subscription not found" });
-
-  doc.status = "unsubscribed";
-  await doc.save();
-
-const { html, text } = buildUnsubscribeEmail({ email });
-sendMail({ to: email, subject: "You have been unsubscribed", html, text }).catch((err) => {
-  console.warn("Unsubscribe mail failed:", err?.message || err);
-});
-
-  return res.json({ ok: true, message: "Unsubscribed" });
 };
 
 // Admin: list with search and date filters, pagination

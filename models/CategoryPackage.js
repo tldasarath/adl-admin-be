@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+
+import mongoose from 'mongoose';
 
 const PointSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true }
@@ -19,7 +20,7 @@ const PagePackageSchema = new mongoose.Schema({
 }, { _id: true });
 
 const PageSchema = new mongoose.Schema({
-  pageName: { type: String, required: true, trim: true }, // e.g. 'JAFZA'
+  pageName: { type: String, required: true, trim: true },
   packages: {
     type: [PagePackageSchema],
     validate: {
@@ -30,11 +31,11 @@ const PageSchema = new mongoose.Schema({
 }, { _id: true });
 
 const CategorySchema = new mongoose.Schema({
-  categoryKey: { type: String, required: true, unique: true }, // e.g. 'dubai_freezones'
-  categoryTitle: { type: String, required: true }, // e.g. 'Dubai Freezones'
+  categoryKey: { type: String, required: true, unique: true },
+  categoryTitle: { type: String, required: true },
   pages: { type: [PageSchema], default: [] },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('CategoryPackage', CategorySchema);
+export default mongoose.models.CategoryPackage || mongoose.model('CategoryPackage', CategorySchema);

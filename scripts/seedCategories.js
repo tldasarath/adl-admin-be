@@ -1,7 +1,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const CategoryPackage = require('../models/CategoryPackage'); // adjust path if needed
+const CategoryPackage = require('../models/CategoryPackage'); 
 
 const MONGO_URI = process.env.MONGO_URL ;
 

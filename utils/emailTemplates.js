@@ -122,48 +122,42 @@ This email was sent to ${email}`;
   return { html, text };
 }
 
-export function buildUnsubscribeEmail({ email }) {
-  const html = `
-  <!doctype html>
+
+
+function escapeHtml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+
+export function buildUnsubscribeEmail({ email = "", unsubscribeLink = null, supportEmail = "info@adlbusinesssolutions.com" } = {}) {
+  const safeEmail = escapeHtml(email);
+  const safeSupport = escapeHtml(supportEmail);
+
+  const html = `<!doctype html>
   <html>
-  <body style="font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; color:#333; padding:24px;">
-    <div style="max-width:600px; margin:0 auto; border:1px solid #e9ecef; border-radius:8px; overflow:hidden;">
-      <div style="background:#f8fafc; padding:16px 24px;">
-        <h2 style="margin:0; font-size:18px;">You have been unsubscribed</h2>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial; color:#111; padding:20px;">
+      <div style="max-width:600px; margin:0 auto; border-radius:10px; border:1px solid #eee; padding:20px;">
+        <h2 style="margin-top:0">You have been unsubscribed</h2>
+        <p>Hi ${safeEmail || ""},</p>
+        <p>We confirm that this address has been removed from our newsletter list. You will not receive further marketing emails from us.</p>
+        ${unsubscribeLink ? `<p><a href="${escapeHtml(unsubscribeLink)}" style="display:inline-block;padding:8px 12px;background:#10b981;color:#fff;border-radius:6px;text-decoration:none;">Re-subscribe</a></p>` : ""}
+        <p style="color:#666;margin-top:12px">If this was a mistake, contact <a href="mailto:${safeSupport}">${safeSupport}</a>.</p>
       </div>
-      <div style="padding:20px;">
-        <p style="margin:0 0 12px 0;">Hi,</p>
-        <p style="margin:0 0 12px 0;">We confirm that <strong>${email}</strong> has been removed from our newsletter list. You will not receive further marketing emails from us.</p>
-        <p style="margin:0 0 12px 0;">If this was a mistake and you’d like to re-subscribe, please visit our website or subscribe again using the form.</p>
-        <p style="margin-top:18px; color:#6b7280; font-size:13px;">— Your Company</p>
-      </div>
-    </div>
-  </body>
-  </html>
-  `;
+    </body>
+  </html>`;
 
-  const text = `Hello,
+  const textParts = [
+    "You have been unsubscribed.",
+    email ? `Email: ${email}` : "",
+    unsubscribeLink ? `Re-subscribe: ${unsubscribeLink}` : "",
+    `If this was a mistake, contact ${supportEmail}.`,
+  ].filter(Boolean);
 
-Your email (${email}) has been unsubscribed from our newsletter list. You will not receive further marketing emails from us.
-
-If this was a mistake you can re-subscribe on our website.
-
-            <!-- Footer -->
-            <tr>
-              <td style="background:#f9fafb; padding:24px 32px; border-top:1px solid #e5e7eb;">
-                
-                <h4 style="margin:0 0 16px 0; font-size:13px; color:#6b7280; text-align:center;">
-                  Not interested anymore? You can 
-                  <a href="${unsubscribeLink}" style="color:#0b63b7; text-decoration:none; font-weight:500;">unsubscribe</a> 
-                  at any time.
-                </h4>
-
-                <p style="margin:0; font-size:12px; color:#9ca3af; text-align:center;">
-                  © ${new Date().getFullYear()} ADL Business Solutions. All rights reserved.
-                </p>
-
-              </td>
-            </tr>`;
-
-  return { html, text };
+  return { html, text: textParts.join("\n\n") };
 }

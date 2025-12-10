@@ -14,11 +14,24 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage });
 
 export default upload;
+
+
 const galleryStorage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "/ADL/adl_gallery",   // <--- NEW FOLDER
+    folder: "/ADL/adl_gallery",  
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
   },
 });
 export const uploadGalleryImage = multer({ storage: galleryStorage });
+
+
+const packageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'ADL/adl_packages',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+  }
+});
+
+export const uploadPackageImage = multer({ storage: packageStorage });
