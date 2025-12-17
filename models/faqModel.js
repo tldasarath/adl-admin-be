@@ -11,8 +11,8 @@ const faqSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    home: {
-      type: Boolean,
+    section: {
+      type: String,
       default: false, 
     },
     order: {

@@ -7,6 +7,7 @@ import packagesRoute from "./packagesRoute.js"
 import newsletterRoute from "./newsletterRoute.js"
 
 import express from 'express'
+import heroRoute from "./heroRoute.js"
 
 const publicRoute =express.Router()
 
@@ -17,5 +18,7 @@ publicRoute.use('/faq',faqRoute)
 publicRoute.use('/blog',blogRoute)
 publicRoute.use('/packages',packagesRoute)
 publicRoute.use('/newsletter',newsletterRoute)
+publicRoute.use('/herosection',heroRoute)
+
 
 export default publicRoute

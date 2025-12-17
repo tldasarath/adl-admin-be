@@ -2,9 +2,9 @@ import { FAQ } from "../../models/faqModel.js";
 
 export const addFAQ = async (req, res) => {
   try {
-    const { question, answer, home, order } = req.body;
+    const { question, answer, section, order } = req.body;
 
-    const faq = await FAQ.create({ question, answer, home, order });
+    const faq = await FAQ.create({ question, answer, section, order });
 
     res.status(201).json({
       success: true,

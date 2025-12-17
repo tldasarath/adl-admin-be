@@ -1,6 +1,6 @@
 import CommonPackage from "../../models/CommonPackage.js";
-import CategoryPackage from "../../models/CategoryPackage.js";
 import cloudinary from "../../config/cloudinary.js";
+import { categoryPackage } from "../../models/CategoryPackage.js";
 
 
 
@@ -46,7 +46,7 @@ export const createCommonPackage = async (req, res) => {
     if (!is_home && !is_freezone) {
       return res
         .status(400)
-        .json({ success: false, message: "Choose either is_home or is_freezone." });
+        .json({ success: false, message: "Choose either home or freezone." });
     }
 
     if (is_home && is_freezone) {
@@ -165,7 +165,7 @@ export const getCommonPackageById = async (req, res) => {
 export const updateCommonPackage = async (req, res) => {
   try {
     const pkg = await CommonPackage.findById(req.params.id);
-    if (!pkg) return res.status(404).json({ success:false, statusCode:404, message:'Package not found.' });
+    if (!pkg) return res.status(404).json({ success: false, statusCode: 404, message: 'Package not found.' });
 
     // helper: normalize incoming points into Array<string> or null (if not provided)
     const normalizePoints = (raw) => {
@@ -211,7 +211,7 @@ export const updateCommonPackage = async (req, res) => {
     if ((is_home && !pkg.is_home) || (is_freezone && !pkg.is_freezone)) {
       const typeField = is_home ? 'is_home' : 'is_freezone';
       const count = await CommonPackage.countDocuments({ [typeField]: true, _id: { $ne: pkg._id } });
-      if (count >= 3) return res.status(400).json({ success:false, statusCode:400, message:`Max 3 packages allowed for ${typeField}.` });
+      if (count >= 3) return res.status(400).json({ success: false, statusCode: 400, message: `Max 3 packages allowed for ${typeField}.` });
     }
 
     // handle new image: delete old from Cloudinary then set new
@@ -235,14 +235,14 @@ export const updateCommonPackage = async (req, res) => {
     // points: store as array of strings (schema expects [String])
     if (points !== null) {
       if (!Array.isArray(points) || points.length === 0 || points.length > 4) {
-        return res.status(400).json({ success:false, statusCode:400, message:'Points must be 1–4.' });
+        return res.status(400).json({ success: false, statusCode: 400, message: 'Points must be 1–4.' });
       }
       pkg.points = points.map(p => String(p));
     }
 
     // validate exclusive booleans
     if (is_home && is_freezone) {
-      return res.status(400).json({ success:false, statusCode:400, message:'Only one of is_home or is_freezone allowed.' });
+      return res.status(400).json({ success: false, statusCode: 400, message: 'Only one of is_home or is_freezone allowed.' });
     }
     if (req.body.is_home !== undefined) pkg.is_home = !!is_home;
     if (req.body.is_freezone !== undefined) pkg.is_freezone = !!is_freezone;
@@ -250,11 +250,11 @@ export const updateCommonPackage = async (req, res) => {
     pkg.updatedAt = Date.now();
     await pkg.save();
 
-    return res.status(200).json({ success:true, statusCode:200, message:'Package updated.', data: pkg });
+    return res.status(200).json({ success: true, statusCode: 200, message: 'Package updated.', data: pkg });
 
   } catch (error) {
     console.error('Update Common Package Error:', error);
-    return res.status(500).json({ success:false, statusCode:500, message:'Server error.', error: error.message });
+    return res.status(500).json({ success: false, statusCode: 500, message: 'Server error.', error: error.message });
   }
 };
 
@@ -331,182 +331,160 @@ export const getCommonPackageCounts = async (req, res) => {
    CATEGORY PACKAGES (Nested)
 ============================================================ */
 
+
 export const createCategoryPackage = async (req, res) => {
   try {
-    const { categoryKey, pageName, title, price, points } = req.body;
+    const { page, title, amount, description, innerPage } = req.body;
+    console.log(req.body);
+    
+    const rawPoints = req.body.points;
+    const pointsArray =
+      typeof rawPoints === "string"
+        ? rawPoints.split(",").map(p => p.trim()).filter(Boolean)
+        : rawPoints;
 
-    if (!categoryKey || !pageName || !title || price === undefined || !Array.isArray(points) || points.length < 1 || points.length > 4) {
+    // ✅ Basic validation
+    if (
+      !page ||
+      !innerPage ||
+      !title ||
+      amount === undefined ||
+      !Array.isArray(pointsArray) ||
+      pointsArray.length < 1 ||
+      pointsArray.length > 4
+    ) {
       return res.status(400).json({
         success: false,
         statusCode: 400,
-        message: "Invalid input. Points must be 1–4."
+        message: "Invalid input. Points must be 1–4.",
       });
     }
 
-    const categoryDoc = await CategoryPackage.findOne({ categoryKey });
-    if (!categoryDoc) {
-      return res.status(404).json({
+    // ✅ LIMIT CHECK: max 5 packages per innerPage
+    const existingCount = await categoryPackage.countDocuments({
+      page,
+      innerPage,
+    });
+
+    if (existingCount >= 4) {
+      return res.status(400).json({
         success: false,
-        statusCode: 404,
-        message: "Category not found."
+        message: "Maximum of 4 packages allowed for this page section.",
       });
     }
 
-    let page = categoryDoc.pages.find(p => p.pageName === pageName);
+    // ✅ Create package
+    const newPackage = new categoryPackage({
+      page,
+      innerPage,
+      title,
+      price: amount,
+      points: pointsArray,
+      description,
+      image: req.file?.path || null,
+    });
 
-    if (page) {
-      if (page.packages.length >= 4) {
-        return res.status(400).json({
-          success: false,
-          statusCode: 400,
-          message: "Max 4 packages allowed per page."
-        });
-      }
-
-      page.packages.push({
-        title,
-        price,
-        points: points.map(p => ({ text: p }))
-      });
-
-    } else {
-      categoryDoc.pages.push({
-        pageName,
-        packages: [
-          {
-            title,
-            price,
-            points: points.map(p => ({ text: p }))
-          }
-        ]
-      });
-    }
-
-    const saved = await categoryDoc.save();
+    await newPackage.save();
 
     return res.status(201).json({
       success: true,
-      statusCode: 201,
-      message: "Category package added successfully.",
-      data: saved
+      message: "Category package created successfully",
+      data: newPackage,
     });
 
   } catch (error) {
-    console.error("Create Category Package Error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "Server error.",
-      error: error.message
+      message: "Server error",
     });
   }
 };
 
 
 
+
 export const getCategoryPackages = async (req, res) => {
   try {
-    const { categoryKey, pageName } = req.query;
+    const { page, innerPage } = req.query;
+    const filter = {};
+    if (page) filter.page = page;
+    if (innerPage) filter.innerPage = innerPage;
+    const packages = await categoryPackage.find(filter).sort({ updatedAt: -1 });
 
-    if (categoryKey) {
-      const doc = await CategoryPackage.findOne({ categoryKey });
-      if (!doc) {
-        return res.status(404).json({
-          success: false,
-          statusCode: 404,
-          message: "Category not found."
-        });
-      }
-
-      if (pageName) {
-        const page = doc.pages.find(p => p.pageName === pageName);
-        if (!page) {
-          return res.status(404).json({
-            success: false,
-            statusCode: 404,
-            message: "Page not found."
-          });
-        }
-
-        return res.status(200).json({
-          success: true,
-          statusCode: 200,
-          data: page.packages
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        statusCode: 200,
-        data: doc
-      });
-    }
-
-    const all = await CategoryPackage.find({});
     return res.status(200).json({
       success: true,
       statusCode: 200,
-      data: all
+      data: packages,
     });
-
   } catch (error) {
     console.error("Get Category Packages Error:", error);
     return res.status(500).json({
       success: false,
       statusCode: 500,
       message: "Server error.",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 
 
+
 export const updateCategoryPackage = async (req, res) => {
   try {
-    const { categoryKey, pageName, packageId } = req.params;
-    const { title, price, points } = req.body;
+    const { packageId } = req.params;
+    const { title, price, points, description } = req.body;
+console.log(req.params,req.body);
 
-    const doc = await CategoryPackage.findOne({ categoryKey });
-    if (!doc) return res.status(404).json({ success: false, message: "Category not found." });
+    // 1️⃣ Find package
+    const pkg = await categoryPackage.findById(packageId);
 
-    const page = doc.pages.find(p => p.pageName === pageName);
-    if (!page) return res.status(404).json({ success: false, message: "Page not found." });
-
-    const pkg = page.packages.id(packageId);
-    if (!pkg) return res.status(404).json({ success: false, message: "Package not found." });
-
-    if (title) pkg.title = title;
-    if (price !== undefined) pkg.price = price;
-
-    if (points) {
-      if (!Array.isArray(points) || points.length === 0 || points.length > 4) {
-        return res.status(400).json({
-          success: false,
-          message: "Points must be 1–4."
-        });
-      }
-      pkg.points = points.map(p => ({ text: p }));
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Category package not found",
+      });
     }
 
-    pkg.updatedAt = Date.now();
+    if (title !== undefined) pkg.title = title;
+    if (price !== undefined) pkg.price = price;
+    if (points !== undefined) pkg.points = points;
+    if (description !== undefined) pkg.description = description;
+console.log(req.file);
 
-    await doc.save();
+
+    if (req.file) {
+      try {
+        const publicId = pkg.image
+          .split("/upload/")[1]
+          .replace(/^v\d+\//, "")
+          .replace(/\.[^/.]+$/, "");
+
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log("Cloudinary delete result:", result);
+        pkg.image = req.file.path;
+
+      } catch (err) {
+        console.warn("Cloudinary delete failed:", err.message);
+      }
+    }
+
+    // 4️⃣ Save updated package
+    const updatedPackage = await pkg.save();
 
     return res.status(200).json({
       success: true,
-      statusCode: 200,
-      message: "Category package updated successfully.",
-      data: pkg
+      message: "Category package updated successfully",
+      data: updatedPackage,
     });
 
   } catch (error) {
     console.error("Update Category Package Error:", error);
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "Server error.",
-      error: error.message
+      message: "Server error",
+      error: error.message,
     });
   }
 };
@@ -515,45 +493,48 @@ export const updateCategoryPackage = async (req, res) => {
 
 export const deleteCategoryPackage = async (req, res) => {
   try {
-    const { categoryKey, pageName, packageId } = req.params;
+    const { categoryId } = req.query;
+    console.log(categoryId);
 
-    const doc = await CategoryPackage.findOne({ categoryKey });
-    if (!doc) return res.status(404).json({ success: false, message: "Category not found." });
+    const pkg = await categoryPackage.findOne({ _id: categoryId });
 
-    const page = doc.pages.find(p => p.pageName === pageName);
-    if (!page) return res.status(404).json({ success: false, message: "Page not found." });
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
 
-
-    const pkgIndex = page.packages.findIndex(p => {
-
+    // ✅ Delete image from Cloudinary
+    if (pkg.image) {
       try {
-        return String(p._id) === String(packageId);
-      } catch (e) {
-        return false;
+        const publicId = pkg.image
+          .split("/upload/")[1]
+          .replace(/^v\d+\//, "")
+          .replace(/\.[^/.]+$/, "");
+
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log("Cloudinary delete result:", result);
+      } catch (err) {
+        console.warn("Cloudinary delete failed:", err.message);
       }
-    });
-
-    if (pkgIndex === -1) return res.status(404).json({ success: false, message: "Package not found." });
+    }
 
 
-    page.packages = page.packages.filter((p, idx) => idx !== pkgIndex);
-
-
-    await doc.save();
+    // ✅ Delete from DB
+    await categoryPackage.deleteOne({ _id: pkg._id });
 
     return res.status(200).json({
       success: true,
-      statusCode: 200,
-      message: "Package deleted successfully."
+      message: "Package deleted successfully",
     });
 
   } catch (error) {
     console.error("Delete Category Package Error:", error);
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "Server error.",
-      error: error.message
+      message: "Server error",
+      error: error.message,
     });
   }
 };
@@ -561,31 +542,31 @@ export const deleteCategoryPackage = async (req, res) => {
 
 
 
-export const getCategoryPageCounts = async (req, res) => {
-  try {
-    const { categoryKey } = req.params;
+// export const getCategoryPageCounts = async (req, res) => {
+//   try {
+//     const { categoryKey } = req.params;
 
-    const doc = await CategoryPackage.findOne({ categoryKey });
-    if (!doc) return res.status(404).json({ success: false, message: "Category not found." });
+//     const doc = await CategoryPackage.findOne({ categoryKey });
+//     if (!doc) return res.status(404).json({ success: false, message: "Category not found." });
 
-    const counts = doc.pages.map(p => ({
-      pageName: p.pageName,
-      count: p.packages.length
-    }));
+//     const counts = doc.pages.map(p => ({
+//       pageName: p.pageName,
+//       count: p.packages.length
+//     }));
 
-    return res.status(200).json({
-      success: true,
-      statusCode: 200,
-      data: counts
-    });
+//     return res.status(200).json({
+//       success: true,
+//       statusCode: 200,
+//       data: counts
+//     });
 
-  } catch (error) {
-    console.error("Get Page Counts Error:", error);
-    return res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: "Server error.",
-      error: error.message
-    });
-  }
-};
+//   } catch (error) {
+//     console.error("Get Page Counts Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       statusCode: 500,
+//       message: "Server error.",
+//       error: error.message
+//     });
+//   }
+// };

@@ -12,7 +12,7 @@ const packagesRoute = express.Router();
 packagesRoute.get('/common-packages', getAllCommonPackages);
 
 
-packagesRoute.get('/category-packages', getCategoryPackages);
+packagesRoute.get('/category-packages/:url', getCategoryPackages);
 
 
 

@@ -5,10 +5,9 @@ import { FAQ } from "../../models/faqModel.js";
 export const getFAQs = async (req, res) => {
   try {
         const { faq } = req.params;
- const value =faq=="home"?true:false 
- console.log(value);
+
     
-    const faqs = await FAQ.find({home:value}).sort({ order: 1 });
+    const faqs = await FAQ.find({section:faq}).sort({ order: 1 });
     res.status(200).json({
       success: true,
       data: faqs,

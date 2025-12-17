@@ -2,9 +2,7 @@ export const authorizeRoles = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: "Not authenticated" });
-    }
-    console.log(req.user);
-    
+    }    
     // ✅ superadmin can access EVERYTHING
     if (req.user.role === "superadmin") {
       return next();

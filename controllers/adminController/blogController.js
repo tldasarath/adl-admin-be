@@ -15,20 +15,51 @@ export const createBlog = async (req, res) => {
       subCategory,
       category,
       canonical,
-      url
+      url,
     } = req.body;
 
-    // Validate required fields
-    if (!title || !description) {
+    // ------------------------------------
+    // 1️⃣ Validate required fields
+    // ------------------------------------
+    if (
+      !title ||
+      !description ||
+      !url ||
+      !metaTitle ||
+      !metaDescription ||
+      !metaKeywords ||
+      !canonical ||
+      !excerpt ||
+      !category
+    ) {
       return res.status(400).json({
         success: false,
-        statusCode: 400,
-        message: "Title and description are required fields.",
+        message: "All fields are required.",
       });
     }
 
-    // Cloudinary image URL (if uploaded)
+    // ------------------------------------
+    // 2️⃣ Check URL uniqueness
+    // ------------------------------------
+    const existingUrl = await blog.findOne({ url });
+    if (existingUrl) {
+      return res.status(409).json({
+        success: false,
+        message: "URL already exists. Please choose a different one.",
+      });
+    }
+
+    const blogCount = await blog.countDocuments({ subCategory });
+
+    if (blogCount >= 4) {
+      return res.status(400).json({
+        success: false,
+        message: `You can only create up to 4 blogs under '${subCategory}'.`,
+      });
+    }
+
     const image = req.file ? req.file.path : null;
+
 
     const newBlog = await blog.create({
       title,
@@ -42,27 +73,33 @@ export const createBlog = async (req, res) => {
       subCategory,
       category,
       canonical,
-      url
+      url,
     });
 
     return res.status(201).json({
       success: true,
-      statusCode: 201,
       message: "Blog created successfully.",
       data: newBlog,
     });
 
   } catch (error) {
     console.error("Create Blog Error:", error);
+    if (error.code === 11000 && error.keyValue?.url) {
+      return res.status(409).json({
+        success: false,
+        message: "URL already exists (database uniqueness).",
+      });
+    }
 
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "An unexpected server error occurred while creating the blog.",
+      message: "Server error while creating blog.",
       error: error.message,
     });
   }
 };
+
+
 
 
 export const getBlogs = async (req, res) => {
@@ -109,7 +146,7 @@ export const getBlogs = async (req, res) => {
 export const getBlog = async (req, res) => {
   try {
     const blogs = await blog.findById(req.params.id);
-    
+
     if (!blogs) return res.status(404).json({ success: false, error: "Not Found" });
 
     res.json({ success: true, data: blogs });
@@ -120,51 +157,140 @@ export const getBlog = async (req, res) => {
 
 export const updateBlog = async (req, res) => {
   try {
-    
     const updates = req.body;
+    const blogId = req.params.id;
 
-    // Fetch existing blog
-    const existingBlog = await blog.findById(req.params.id);
+    // --------------------------------
+    // 1️⃣ Fetch existing blog
+    // --------------------------------
+    const existingBlog = await blog.findById(blogId);
     if (!existingBlog) {
       return res.status(404).json({
         success: false,
-        statusCode: 404,
         message: "Blog not found."
       });
     }
 
-    // If image is replaced, delete old Cloudinary image
+    // --------------------------------
+    // 2️⃣ Validate required fields
+    // --------------------------------
+    const requiredFields = [
+      "title",
+      "excerpt",
+      "description",
+      "metaTitle",
+      "metaDescription",
+      "metaKeywords",
+      "canonical",
+      "url",
+      "category"
+    ];
+
+    for (const field of requiredFields) {
+      if (!updates[field] || updates[field].trim() === "") {
+        return res.status(400).json({
+          success: false,
+          message: `Field '${field}' is required.`
+        });
+      }
+    }
+    if (updates.category !== "blog" || "freezone" && !updates.subCategory) {
+      return res.status(400).json({
+        success: false,
+        message: "Subcategory is required for this category."
+      });
+    }
+
+    // --------------------------------
+    // 3️⃣ Normalize URL
+    // --------------------------------
+    updates.url = updates.url.trim().toLowerCase();
+    const oldUrl = existingBlog.url.trim().toLowerCase();
+    const newUrl = updates.url;
+
+    const isSameUrl = oldUrl === newUrl;
+
+    // --------------------------------
+    // 4️⃣ Validate URL format
+    // --------------------------------
+    if (!/^[a-z0-9-]+$/.test(newUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: "URL can contain only lowercase letters, numbers, and hyphens."
+      });
+    }
+
+    // --------------------------------
+    // 5️⃣ Check URL uniqueness ONLY if changed
+    // --------------------------------
+    if (!isSameUrl) {
+      const urlExists = await blog.findOne({
+        url: newUrl,
+        _id: { $ne: blogId }
+      });
+
+      if (urlExists) {
+        return res.status(409).json({
+          success: false,
+          message: "URL already exists. Please choose a different one."
+        });
+      }
+    }
+
+    // -----------------------------------------------
+    // 6️⃣ Limit: Maximum 5 blogs per subcategory
+    //    Only check if subCategory is changed
+    // -----------------------------------------------
+    if (
+      updates.subCategory &&
+      updates.subCategory !== existingBlog.subCategory
+    ) {
+      const blogCount = await blog.countDocuments({
+        subCategory: updates.subCategory
+      });
+
+      if (blogCount >= 4) {
+        return res.status(400).json({
+          success: false,
+          message: `Only 4 blogs are allowed under '${updates.subCategory}'. Please choose another inner page.`
+        });
+      }
+    }
+
+    // --------------------------------
+    // 7️⃣ Cloudinary image replacement
+    // --------------------------------
     if (req.file) {
       if (existingBlog.image) {
         try {
-          const oldUrl = existingBlog.image;
+          const oldImageUrl = existingBlog.image;
 
-          // Extract public_id safely
-          const publicId = oldUrl
+          const publicId = oldImageUrl
             .split("/")
             .slice(-2)
             .join("/")
-            .replace(/\.[^/.]+$/, ""); // remove extension
+            .replace(/\.[^/.]+$/, "");
 
           await cloudinary.uploader.destroy(publicId);
+
         } catch (err) {
           console.warn("Cloudinary delete failed:", err.message);
         }
       }
 
-      // Save new Cloudinary URL
       updates.image = req.file.path;
     }
 
-    const updatedBlog = await blog.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true }
-    );
+    // --------------------------------
+    // 8️⃣ Update blog
+    // --------------------------------
+    const updatedBlog = await blog.findByIdAndUpdate(blogId, updates, {
+      new: true,
+      runValidators: true
+    });
 
     return res.status(200).json({
       success: true,
-      statusCode: 200,
       message: "Blog updated successfully.",
       data: updatedBlog
     });
@@ -172,14 +298,22 @@ export const updateBlog = async (req, res) => {
   } catch (err) {
     console.error("Update Error:", err);
 
+    if (err.code === 11000 && err.keyValue?.url) {
+      return res.status(409).json({
+        success: false,
+        message: "URL already exists (database uniqueness)."
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      statusCode: 500,
-      message: "An unexpected server error occurred while updating the blog.",
+      message: "Server error while updating the blog.",
       error: err.message
     });
   }
 };
+
+
 
 
 export const deleteBlog = async (req, res) => {
