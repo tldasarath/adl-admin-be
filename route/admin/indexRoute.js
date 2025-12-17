@@ -6,6 +6,8 @@ import enquiryRoute from './enquiryRoute.js'
 import blogRoute from './blogRoute.js'
 import newsletterRoute from './newsletterRoute.js'
 import packagesRoute from './packagesRoutes.js'
+import analyticsRoute from './analyticsRoute.js'
+import settingsRoute from './settingsRoute.js'
 
 import seoRoute from './seoRoute.js'
 import galleryRoute from './galleryRoute.js'
@@ -21,4 +23,6 @@ adminroute.use('/packages',packagesRoute)
 adminroute.use('/seo',seoRoute)
 adminroute.use('/gallery',galleryRoute)
 adminroute.use('/herosection',heroRoute)
+adminroute.use('/analytics', analyticsRoute);
+adminroute.use('/settings', settingsRoute);
 export default adminroute
