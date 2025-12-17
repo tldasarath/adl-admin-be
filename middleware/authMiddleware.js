@@ -12,7 +12,7 @@ export const authMiddleware = (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     // ✅ 2. Verify token
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
         if (err.name === "TokenExpiredError") {
           return res.status(401).json({ message: "Access token expired" });

@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
 const secret = process.env.UNSUBSCRIBE_JWT_SECRET || "fallback_secret";
 
