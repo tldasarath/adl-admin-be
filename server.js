@@ -1,104 +1,112 @@
 // server.js
 import env from 'dotenv';
-env.config(); // <-- must run before reading process.env
-
+env.config();
 import express from 'express';
 import cors from 'cors';
-import connectDB from './config/connectDb.js';
+import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import http from 'http';
+
+// Config imports
+import { config } from './config/environment.js';
+import { getCorsConfig, corsDebugMiddleware } from './config/corsConfig.js';
+import { securityHeaders, apiLimiter, authLimiter } from './config/security.js';
+import connectDB from './config/connectDb.js';
+
+// Route imports
 import adminroute from './route/admin/indexRoute.js';
 import publicRoute from './route/public/indexRoute.js';
-import cookieParser from 'cookie-parser';
-import http from 'http';
+
+// Socket imports
 import { initSocketServer } from './socket/socketServer.js';
 import { startPoller } from './socket/poller.js';
 
-// Fix __dirname for ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
+const server = http.createServer(app);
 
-app.use(morgan("dev"));
+// ============ MIDDLEWARE ============
+app.use(securityHeaders);
+app.use(morgan(config.isProduction ? 'combined' : 'dev'));
+app.use(cookieParser());
 
-app.use(cookieParser()); 
-// Connect DB
-connectDB();
+// CORS
+app.use(cors(getCorsConfig()));
+if (config.isDevelopment) {
+  app.use(corsDebugMiddleware);
+}
 
-// Cors - allow your frontend origins
-app.use(cors({
-  origin: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000')
-            .split(',')
-            .map(s => s.trim()),
-  credentials: true
-}));
+// Body parsers
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Rate limiting (production only)
+if (config.isProduction) {
+  app.use('/api', apiLimiter);
+  app.use('/api/v1/admin/auth', authLimiter);
+}
 
-// Routes (mounted before server start - that's fine)
+// ============ ROUTES ============
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    env: config.nodeEnv,
+    timestamp: new Date().toISOString() 
+  });
+});
+
 app.use('/public/v1', publicRoute);
 app.use('/api/v1/admin', adminroute);
 
-// Port (fallback safe default)
-const PORT = Number(process.env.PORT) || 8080;
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
 
-// Create HTTP server for Socket.IO to attach to
-const server = http.createServer(app);
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    error: config.isProduction ? 'Internal server error' : err.message
+  });
+});
 
-let io = null; // will hold socket io instance
+// ============ SERVER STARTUP ============
+let io = null;
 
 async function startServer() {
   try {
-    // 1) Connect database (ensure connectDB returns a Promise)
     await connectDB();
-    console.log('MongoDB connected successfully (server startup).');
+    console.log('✅ Database connected');
 
-    // 2) Initialize Socket.IO (attach to HTTP server).
-    // Pass origins from env or defaults
-    const appOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim());
-    io = initSocketServer(server, { appOrigins });
+    const { getSocketCorsConfig } = await import('./config/corsConfig.js');
+    io = initSocketServer(server, { corsOptions: getSocketCorsConfig() });
+    console.log('✅ Socket.IO initialized');
 
-    // 3) Start poller AFTER DB connected and socket server initialized
-    startPoller({ pollMs: Number(process.env.ANALYTICS_POLL_MS || 15000) });
+    startPoller({ pollMs: config.analytics.pollMs });
+    console.log('✅ Analytics poller started');
 
-    // 4) Start HTTP server
-    server.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    server.listen(config.port, () => {
+      console.log(`\n🚀 Server running on port ${config.port}`);
+      console.log(`📍 Environment: ${config.nodeEnv}`);
+      console.log(`🌐 CORS configured\n`);
     });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    console.error('❌ Failed to start server:', err);
     process.exit(1);
   }
 }
 
 startServer();
 
-// Graceful shutdown: close server, socket and exit cleanly
+// Graceful shutdown
 async function shutdown(signal) {
-  console.log(`Received ${signal} - closing server...`);
-  try {
-    // stop accepting new connections
-    server.close(err => {
-      if (err) console.error('Error closing server:', err);
-      else console.log('HTTP server closed.');
-    });
-
-    // close socket.io (if running)
-    if (io && io.close) {
-      await io.close();
-      console.log('Socket.IO server closed.');
-    }
-
-    // Optional: if your poller has cleanup/releaseLock, ensure it's invoked by process events in poller.js
-    // Give a short grace period then exit
-    setTimeout(() => process.exit(0), 1000);
-  } catch (e) {
-    console.error('Shutdown error:', e);
-    process.exit(1);
+  console.log(`\n⚠️  ${signal} received, closing server...`);
+  server.close(() => console.log('✅ HTTP server closed'));
+  if (io?.close) {
+    await io.close();
+    console.log('✅ Socket.IO closed');
   }
+  setTimeout(() => process.exit(0), 1000);
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));
