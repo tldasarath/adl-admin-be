@@ -34,14 +34,15 @@ export const login = async (req, res) => {
     });
 
     user.refreshToken = refreshToken;
-    await user.save();    
+    await user.save();
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      // secure: process.env.NODE_ENV === "production", // true on HTTPS
-      secure: false,               // ✅ MUST be false on localhost
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });    
+      secure: process.env.NODE_ENV === "production", // ✅ true on Render
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Login successful",
@@ -61,7 +62,7 @@ export const login = async (req, res) => {
 
 export const refreshAccessToken = async (req, res) => {
   try {
-    
+
     const refreshToken = req.cookies.refreshToken;
 
     // ✅ 1. No cookie → Unauthorized
@@ -92,7 +93,7 @@ export const refreshAccessToken = async (req, res) => {
         });
 
         return res.status(200).json({
-           accessToken: newAccessToken,
+          accessToken: newAccessToken,
           user: {
             id: user._id,
             name: user.name,
