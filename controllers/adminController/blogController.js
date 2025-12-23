@@ -171,6 +171,7 @@ export const updateBlog = async (req, res) => {
   try {
     const updates = req.body;
     const blogId = req.params.id;
+console.log(req.body);
 
     // --------------------------------
     // 1️⃣ Fetch existing blog
@@ -206,7 +207,7 @@ export const updateBlog = async (req, res) => {
         });
       }
     }
-    if (updates.category !== "blog" || "freezone" && !updates.subCategory) {
+    if (updates.category !== "blog" && !updates.subCategory) {
       return res.status(400).json({
         success: false,
         message: "Subcategory is required for this category."
