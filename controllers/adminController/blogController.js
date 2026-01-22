@@ -49,18 +49,28 @@ export const createBlog = async (req, res) => {
       });
     }
 
+    // ------------------------------------
+    // 3️⃣ Blog limit based on category
+    // ------------------------------------
     const blogCount = await blog.countDocuments({ subCategory });
 
-    if (blogCount >= 4) {
+    const maxLimit = category === "service" ? 5 : 4;
+
+    if (blogCount >= maxLimit) {
       return res.status(400).json({
         success: false,
-        message: `You can only create up to 4 blogs under '${subCategory}'.`,
+        message: `You can only create up to ${maxLimit} blogs under '${subCategory}'.`,
       });
     }
 
+    // ------------------------------------
+    // 4️⃣ Image handling
+    // ------------------------------------
     const image = req.file ? req.file.path : null;
 
-
+    // ------------------------------------
+    // 5️⃣ Create blog
+    // ------------------------------------
     const newBlog = await blog.create({
       title,
       excerpt,
@@ -84,6 +94,7 @@ export const createBlog = async (req, res) => {
 
   } catch (error) {
     console.error("Create Blog Error:", error);
+
     if (error.code === 11000 && error.keyValue?.url) {
       return res.status(409).json({
         success: false,
@@ -98,6 +109,7 @@ export const createBlog = async (req, res) => {
     });
   }
 };
+
 
 
 
@@ -159,6 +171,7 @@ export const updateBlog = async (req, res) => {
   try {
     const updates = req.body;
     const blogId = req.params.id;
+console.log(req.body);
 
     // --------------------------------
     // 1️⃣ Fetch existing blog
@@ -194,7 +207,7 @@ export const updateBlog = async (req, res) => {
         });
       }
     }
-    if (updates.category !== "blog" || "freezone" && !updates.subCategory) {
+    if (updates.category !== "blog" && !updates.subCategory) {
       return res.status(400).json({
         success: false,
         message: "Subcategory is required for this category."
