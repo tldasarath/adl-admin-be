@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
-const enquirySchema = new mongoose.Schema({
+import mongooseInstance from "../config/mongooseInstance.js";
+const enquirySchema = new mongooseInstance.Schema({
   firstName: {
     type: String,
     required: true,
@@ -25,4 +25,7 @@ const enquirySchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-export const Enquiry = mongoose.model('Enquiry', enquirySchema);
+const Enquiry =
+  mongooseInstance.models.Enquiry || mongooseInstance.model("Enquiry", enquirySchema);
+
+export default Enquiry;

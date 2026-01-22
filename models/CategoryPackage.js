@@ -1,8 +1,9 @@
 
-import mongoose from 'mongoose';
+import mongooseInstance from "../config/mongooseInstance.js";
 
 
-const PagePackageSchema = new mongoose.Schema({
+
+const PagePackageSchema = new mongooseInstance.Schema({
   title: { type: String, required: true, trim: true },
   price: { type: Number, required: true, min: 0 },
   page: { type: String, required: true},
@@ -16,4 +17,9 @@ const PagePackageSchema = new mongoose.Schema({
 
 
 
-export const categoryPackage = mongoose.model('categoryPackage', PagePackageSchema);
+const CategoryPackage =
+  mongooseInstance.models.CategoryPackage ||
+  mongooseInstance.model('CategoryPackage', PagePackageSchema);
+
+export default CategoryPackage;
+

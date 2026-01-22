@@ -1,25 +1,26 @@
-// socket/poller.js
-import mongoose from 'mongoose';
+
+
 import { getIo } from './socketServer.js';
 import { v4 as uuidv4 } from 'uuid';
-import { getRealtime, getTopPages } from '../services/analytics/analyticsService.js';
+import { getRealtime, getTopPages ,getPerformance } from '../services/analytics/analyticsService.js';
+import mongooseInstance from '../config/mongooseInstance.js';
 
 const LOCK_ID = 'analytics-poller-lock';
-const DEFAULT_POLL_MS = Number(process.env.ANALYTICS_POLL_MS || 15000); // default 15s
-const LOCK_TTL_MS = Number(process.env.POLL_LEADER_TTL_MS || DEFAULT_POLL_MS * 4); // leader lease
-const MAX_BACKOFF_MS = Number(process.env.MAX_POLL_BACKOFF_MS || 5 * 60 * 1000); // up to 5 minutes
+const DEFAULT_POLL_MS = Number(process.env.ANALYTICS_POLL_MS || 15000);
+const LOCK_TTL_MS = Number(process.env.POLL_LEADER_TTL_MS || DEFAULT_POLL_MS * 4); 
+const MAX_BACKOFF_MS = Number(process.env.MAX_POLL_BACKOFF_MS || 5 * 60 * 1000); 
 let performanceCache = {};
 let lastPerfAt = 0;
-const PERF_REFRESH_MS = Number(process.env.PERF_REFRESH_MS || 1000 * 60 * 5); // default 5 minutes
+const PERF_REFRESH_MS = Number(process.env.PERF_REFRESH_MS || 1000 * 60 * 5); 
 
 // Lock schema (single small collection)
-const lockSchema = new mongoose.Schema({
+const lockSchema = new mongooseInstance.Schema({
   _id: { type: String, default: LOCK_ID },
   owner: String,
   expiresAt: Date
 }, { collection: 'pollerLocks' });
 
-const LockModel = mongoose.models.PollerLock || mongoose.model('PollerLock', lockSchema);
+const LockModel = mongooseInstance.models.PollerLock || mongooseInstance.model('PollerLock', lockSchema);
 
 // internal state
 let pollerInterval = null;
@@ -87,7 +88,7 @@ async function tryAcquireLock(instanceId, maxAttempts = 3) {
     }
 
     // jitter before retry to avoid thundering herd
-    const jitter = Math.floor(Math.random() * 200) + 50; // 50-250ms
+    const jitter = Math.floor(Math.random() * 200) + 50; 
     await new Promise(r => setTimeout(r, jitter));
   }
 
@@ -154,17 +155,57 @@ async function pollOnce() {
   }
 }
 
+async function refreshPerformanceIfNeeded() {
+  const now = Date.now();
+  if (now - lastPerfAt <= PERF_REFRESH_MS) return;
+
+  try {
+    const [p24, p7, p28, p90] = await Promise.all([
+      getPerformance({ range: '24h', topN: 5 }),
+      getPerformance({ range: '7d', topN: 5 }),
+      getPerformance({ range: '28d', topN: 5 }),
+      getPerformance({ range: '3mo', topN: 5 })
+    ]);
+
+    performanceCache = {
+      '24h': p24,
+      '7d': p7,
+      '28d': p28,
+      '3mo': p90,
+      fetchedAt: new Date().toISOString()
+    };
+
+    lastPerfAt = Date.now();
+
+    const io = getIo();
+    if (io) {
+      io.to('admins').volatile.emit('analytics:performance', performanceCache);
+    }
+  } catch (e) {
+    console.warn('perf refresh failed:', e && e.message);
+  }
+}
+
+
 /**
  * Poll wrapper with exponential backoff on repeated failures.
  */
+
 async function pollOnceWithBackoff() {
   try {
     await pollOnce();
+  refreshPerformanceIfNeeded().catch(err => {
+  console.warn('Performance refresh skipped:', err?.message);
+});
+
     consecutiveFailures = 0;
   } catch (e) {
     consecutiveFailures++;
     const backoff = Math.min(2 ** consecutiveFailures * 1000, MAX_BACKOFF_MS);
-    console.warn(`Poller failure #${consecutiveFailures}, backing off ${backoff}ms`, e && (e.message || e));
+    console.warn(
+      `Poller failure #${consecutiveFailures}, backing off ${backoff}ms`,
+      e && (e.message || e)
+    );
     await new Promise(r => setTimeout(r, backoff));
   }
 }
@@ -253,22 +294,7 @@ export async function stopPoller() {
   console.log('Poller stopped via stopPoller()');
 }
 
-const now = Date.now();
-if (now - lastPerfAt > PERF_REFRESH_MS) {
-  try {
-    // fetch aggregated ranges but do them in parallel
-    const [p24, p7, p28, p90] = await Promise.all([
-      getPerformance({ range: '24h', topN: 5 }),
-      getPerformance({ range: '7d', topN: 5 }),
-      getPerformance({ range: '28d', topN: 5 }),
-      getPerformance({ range: '3mo', topN: 5 })
-    ]);
-    performanceCache = { '24h': p24, '7d': p7, '28d': p28, '3mo': p90, fetchedAt: new Date().toISOString() };
-    lastPerfAt = Date.now();
 
-    const io = getIo();
-    if (io) io.to('admins').volatile.emit('analytics:performance', performanceCache);
-  } catch (e) {
-    console.warn('perf refresh failed:', e && e.message);
-  }
-}
+
+
+

@@ -1,5 +1,5 @@
 import cloudinary from "../../config/cloudinary.js";
-import { blog } from "../../models/blogModel.js";
+import  blog  from "../../models/blogModel.js";
 
 
 export const createBlog = async (req, res) => {

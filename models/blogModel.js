@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+import mongooseInstance from "../config/mongooseInstance.js";
 
-const blogSchema = new mongoose.Schema(
+const blogSchema = new mongooseInstance.Schema(
     {
         title: { type: String, required: true },
         excerpt: { type: String, required: false },
@@ -24,4 +24,7 @@ const blogSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-export const blog = mongoose.model("Blog", blogSchema);
+const Blog =
+  mongooseInstance.models.Blog || mongooseInstance.model("Blog", blogSchema);
+
+export default Blog;

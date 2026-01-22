@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+import mongooseInstance from "../config/mongooseInstance.js";
 
-const gallerySchema = new mongoose.Schema(
+const gallerySchema = new mongooseInstance.Schema(
   {
     image: {
       type: String,
@@ -12,4 +12,8 @@ const gallerySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export const gallery= mongoose.model("gallery", gallerySchema);
+
+const Gallery =
+  mongooseInstance.models.Gallery || mongooseInstance.model("Gallery", gallerySchema);
+
+export default Gallery;

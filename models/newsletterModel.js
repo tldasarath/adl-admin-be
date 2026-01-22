@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+import mongooseInstance from "../config/mongooseInstance.js";
 
-const newsletterSchema = new mongoose.Schema({
+const newsletterSchema = new mongooseInstance.Schema({
   email: {
     type: String,
     required: true,
@@ -55,4 +55,8 @@ newsletterSchema.pre("save", function (next) {
 
 newsletterSchema.index({ email: 1 });
 
-export default mongoose.model("Newsletter", newsletterSchema);
+const Newsletter =
+  mongooseInstance.models.Newsletter ||
+  mongooseInstance.model("Newsletter", newsletterSchema);
+
+export default Newsletter;

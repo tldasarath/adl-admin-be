@@ -1,12 +1,13 @@
-import mongoose from 'mongoose';
+
 import { configDotenv } from 'dotenv';
+import mongooseInstance from './mongooseInstance';
 configDotenv()
 const MONGO_URI = process.env.MONGO_URL;
 
 // Function to connect to MongoDB
 const connectDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI, {
+    await mongooseInstance.connect(MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

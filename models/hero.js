@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+import mongooseInstance from "../config/mongooseInstance.js";
 
-const HeroSectionSchema = new mongoose.Schema(
+const HeroSectionSchema = new mongooseInstance.Schema(
   {
     title: {
       type: String,
@@ -23,4 +23,8 @@ const HeroSectionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export  const herosection=  mongoose.model("HeroSection", HeroSectionSchema);
+const HeroSection =
+  mongooseInstance.models.HeroSection ||
+  mongooseInstance.model("HeroSection", HeroSectionSchema);
+
+export default HeroSection;

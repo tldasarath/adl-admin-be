@@ -1,9 +1,9 @@
 
-import mongoose from 'mongoose';
+import mongooseInstance from "../config/mongooseInstance.js";
 
 
 
-const CommonPackageSchema = new mongoose.Schema({
+const CommonPackageSchema = new mongooseInstance.Schema({
   iconUrl: { type: String },
   iconPublicId: { type: String },
   title: { type: String, required: true, trim: true },
@@ -27,4 +27,4 @@ CommonPackageSchema.pre('save', function (next) {
   next();
 });
 
-export default mongoose.models.CommonPackage || mongoose.model('CommonPackage', CommonPackageSchema);
+export default mongooseInstance.models.CommonPackage || mongooseInstance.model('CommonPackage', CommonPackageSchema);

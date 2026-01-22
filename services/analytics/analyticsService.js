@@ -110,7 +110,13 @@ export async function getRealtime({ limit = 50 } = {}) {
   const property = `properties/${GA_PROPERTY}`;
 
   // minimal request
-  const realtimeReq = { property, metrics: [{ name: 'activeUsers' }], dimensions: [{ name: 'pagePath' }], limit };
+  const realtimeReq = { 
+    property,
+     metrics: 
+     [{ name: 'activeUsers' }], 
+    //  dimensions: [{ name: 'pagePath' }],
+      limit 
+    };
   try {
     if (typeof client.runRealtimeReport !== 'function') {
       throw new Error('Realtime method not available in GA client');
